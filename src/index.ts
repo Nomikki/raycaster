@@ -1,17 +1,7 @@
 import "@/index.scss";
+import Player from "./player";
+import Color from "./utils/colors";
 import { ensure, rgbToHex } from "./utils";
-
-export class Color {
-  r = 0;
-  g = 0;
-  b = 0;
-
-  constructor(r: number, g: number, b: number) {
-    this.r = r;
-    this.g = g;
-    this.b = b;
-  }
-}
 
 export class Game {
   canvas: Element;
@@ -19,16 +9,18 @@ export class Game {
 
   width: number;
   height: number;
+  player: Player;
 
   constructor() {
     this.canvas = ensure(document.querySelector("#screen"));
     this.ctx = ensure((this.canvas as HTMLCanvasElement).getContext("2d"));
     this.width = 1024;
     this.height = 512;
+
+    this.player = new Player();
   }
 
   clear(color: Color): void {
-    //Game
     this.ctx.fillStyle = rgbToHex(color.r, color.g, color.b);
     this.ctx.fillRect(0, 0, this.width, this.height);
   }
@@ -47,7 +39,7 @@ export class Game {
   }
 
   run(): void {
-    console.log("Game is running");
+    // console.log("Game is running");
     this.clear(new Color(64, 64, 64));
     this.putPixel(32, 32, new Color(255, 0, 0));
   }
