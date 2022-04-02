@@ -3,6 +3,7 @@ import Player from "./player";
 import Color from "./utils/colors";
 import Map from "./map";
 import { ensure, float2int, rgbToHex, sleep } from "./utils";
+import Texture from "./textures";
 
 export class Game {
   canvas: Element;
@@ -12,6 +13,7 @@ export class Game {
   height: number;
   player: Player;
   map: Map;
+  texture: Texture;
 
   keyLeft: boolean;
   keyRight: boolean;
@@ -29,7 +31,7 @@ export class Game {
     this.ctx = ensure((this.canvas as HTMLCanvasElement).getContext("2d"));
 
     this.width = 320;
-    this.height = 200;
+    this.height = 320;
 
     this.timer1 = new Date();
     this.timer2 = new Date();
@@ -42,6 +44,7 @@ export class Game {
 
     this.player = new Player(50, 100);
     this.map = new Map();
+    this.texture = new Texture();
 
     document.addEventListener(
       "keydown",
@@ -188,17 +191,18 @@ export class Game {
     const maxDof = 8;
     const pa = this.player.angle;
 
-    const numOfRays = 64; // how accurate raycaster will be
+    const numOfRays = 256; // how accurate raycaster will be
     const dim = 64; // lighting
 
     const w = this.width; // size of screen
     const h = this.height;
     const fov = 60; // field of view
     const stepOfAngle = DR*(fov/numOfRays);
-
+    
     const renderOffsetX = 0;
     const renderOffsetY = 0;
     const pixelLen = (w / numOfRays);
+    
 
     const px = this.player.x;
     const py = this.player.y;
@@ -229,7 +233,7 @@ export class Game {
       let disH = 1000000;
       let hx = px;
       let hy = py;
-      let mh = 0;
+      // let mh = 0;
 
       if (ra > PI) { ry = (( float2int(py)>>5) << 5) - 0.0001; rx = (py - ry) * aTan + px; yo = -tileSize; xo = -yo * aTan; }
       if (ra < PI) { ry = (( float2int(py)>>5) << 5) + tileSize; rx = (py - ry) * aTan + px;      yo = tileSize; xo = -yo * aTan; }
@@ -245,7 +249,7 @@ export class Game {
         {
           dof = maxDof;
           hx = rx; hy = ry; disH = this.distance(px, py, hx, hy);
-          mh = this.map.data[mp];
+          // mh = this.map.data[mp];
         } else {
           rx += xo; ry += yo; dof++;
         }
@@ -256,7 +260,7 @@ export class Game {
       let disV = 1000000;
       let vx = px;
       let vy = py;
-      let mv = 0;
+      // let mv = 0;
       dof = 0;
       if (ra > PI2 && ra < PI3) { rx = (( (px | 0)>>5) << 5) - 0.0001; ry = (px - rx) * nTan + py; xo = -tileSize; yo = -xo * nTan; }
       if (ra < PI2 || ra > PI3) { rx = (( (px | 0)>>5) << 5) + tileSize;     ry = (px - rx) * nTan + py; xo =  tileSize; yo = -xo * nTan; }
@@ -269,17 +273,18 @@ export class Game {
         if (mp > 0 && mp < this.map.mapX * this.map.mapY && this.map.data[mp] > 0)
         {
           vx = rx; vy = ry;  disV = this.distance(px, py, vx, vy);
-          mv = this.map.data[mp];
+          // mv = this.map.data[mp];
           dof = maxDof;
         } else {
           rx += xo; ry += yo; dof++;
         }
       }
 
-      let color = new Color(255, 255, 255);
+      const color = new Color(255, 255, 255);
+      let shade = 1;
 
-      if (disV < disH) { rx = vx; ry = vy; disT = disV; color = new Color(192, 192, 192);  if (mv === 2) color = new Color(0, 0, 255); }
-      if (disH < disV) { rx = hx; ry = hy; disT = disH; color = new Color(255, 255, 255);  if (mh === 2) color = new Color(0, 0, 255); }
+      if (disV < disH) { rx = vx; ry = vy; disT = disV; shade = 0.5; }
+      if (disH < disV) { rx = hx; ry = hy; disT = disH;  }
 
       // await this.DrawLine(px, py, rx, ry, new Color(255, 200, 0));
 
@@ -290,20 +295,49 @@ export class Game {
       disT = disT * Math.cos(ca);
 
       let lineH = (this.map.mapS * h) / disT;
-      if (lineH > h) lineH = h;
-      const lineO = (h/2) - lineH/2;
+      const tyStep = 32.0 / lineH;
+      let tyOffset = 0;
+
+      if (lineH > h) {
+        tyOffset = (lineH - h) / 2;
+        lineH = h;
+      }
+      const lineOffset = (h/2) - lineH/2;
 
       const ax = r * pixelLen + renderOffsetX;
-      const ay = lineO + renderOffsetY;
-      const bx = r * pixelLen + renderOffsetX;
-      const by = lineH+lineO + renderOffsetY;
+      const ay = lineOffset + renderOffsetY;
+      let ty = tyOffset * tyStep;
+  
+      let tx = 0;
+      
+      if (shade === 1) {
+       tx = float2int(rx / 2) % 32; if (ra > 180) { tx = 31 - tx; }
+      } else {
+        tx = float2int(ry / 2) % 32; if (ra > 90 && ra < 270) { tx = 31 - tx; }
+      }
 
-      color.r *= 1 / disT * dim;
-      color.g *= 1 / disT * dim;
-      color.b *= 1 / disT * dim;
+      ty += 32;
 
-      for (let ol = 0; ol < pixelLen; ol++) {
-        this.DrawLine(ax+ol, ay, bx+ol, by, color);
+      shade *= 1.0 / disT * dim;
+      
+      for (let y = 0; y < lineH; y++) {
+        const id = float2int(ty) * 32 + float2int(tx);
+        const c = this.texture.AllTextures[id] * shade;
+        color.r = c * 255;
+        color.g = c * 255;
+        color.b = c * 255;
+
+        color.r = float2int(color.r);
+        color.g = float2int(color.g);
+        color.b = float2int(color.b);
+
+        for (let ol = 0; ol < pixelLen; ol++) {
+          const ppx = float2int(ax+ol);
+          const ppy = float2int(ay+y);
+          this.PutPixel(ppx, ppy, color);
+        }
+
+        ty += tyStep;
       }
 
       ra += stepOfAngle;
@@ -332,26 +366,43 @@ export class Game {
     if (this.keyRight) {
       this.player.AddRotation(turningSpeed);
     }
+
+    const collisionMargin = 5;
+    let xo = 0; if (this.player.px < 0) {xo = -collisionMargin;} else {xo = collisionMargin;}
+    let yo = 0; if (this.player.py < 0) {yo = -collisionMargin;} else {yo = collisionMargin;}
+
+    const ipx = float2int(this.player.x / this.map.mapS);
+    const ipxAddXo = float2int((this.player.x + xo)/this.map.mapS);
+    const ipxSubXo = float2int((this.player.x - xo)/this.map.mapS);
+
+    const ipy = float2int(this.player.y / this.map.mapS);
+    const ipyAddYo = float2int((this.player.y + yo)/this.map.mapS);
+    const ipySubYo = float2int((this.player.y - yo)/this.map.mapS);
+
     if (this.keyUp) {
-      this.player.x += this.player.px * movementSpeed;
-      this.player.y += this.player.py * movementSpeed;
+      if (this.map.data[ipy * this.map.mapX + ipxAddXo] === 0)
+          this.player.x += this.player.px * movementSpeed;
+      if (this.map.data[ipyAddYo * this.map.mapX + ipx] === 0)
+        this.player.y += this.player.py * movementSpeed;
     }
     if (this.keyDown) {
-      this.player.x -= this.player.px * movementSpeed;
-      this.player.y -= this.player.py * movementSpeed;
+      if (this.map.data[ipy * this.map.mapX + ipxSubXo] === 0)
+          this.player.x -= this.player.px * movementSpeed;
+      if (this.map.data[ipySubYo * this.map.mapX + ipx] === 0)
+        this.player.y -= this.player.py * movementSpeed;
     }
   }
 
   async Run() {
     console.log("Game is running");
     while (true) {
+      this.HandleInputs();
       this.Clear(new Color(64, 64, 64));
       // this.DrawMap2d();
       // this.DrawPlayer();
       this.DrawRays3D();
 
       // await console.log(`x ${this.player.x}, y: ${this.player.y}`);
-      this.HandleInputs();
       const targetFPS = 60;
       const fps = 1.0 / targetFPS * 1000;
       await sleep(fps);
