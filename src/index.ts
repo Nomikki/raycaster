@@ -30,8 +30,8 @@ export class Game {
     this.canvas = ensure(document.querySelector("#screen"));
     this.ctx = ensure((this.canvas as HTMLCanvasElement).getContext("2d"));
 
-    this.width = 320;
-    this.height = 320;
+    this.width = 480;
+    this.height = 300;
 
     this.timer1 = new Date();
     this.timer2 = new Date();
@@ -160,7 +160,7 @@ export class Game {
   async DrawMap2d() {
     for (let y = 0; y < this.map.mapY; y++) {
       for (let x = 0; x < this.map.mapX; x++) {
-        const tileID = this.map.data[y * this.map.mapX + x];
+        const tileID = this.map.dataW[y * this.map.mapX + x];
         let color = new Color(0, 0, 0);
 
         if (tileID === 1) color = new Color(200, 200, 200);
@@ -191,18 +191,18 @@ export class Game {
     const maxDof = 8;
     const pa = this.player.angle;
 
-    const numOfRays = 256; // how accurate raycaster will be
-    const dim = 64; // lighting
+    const numOfRays = 120; // how accurate raycaster will be
+    const dim = 200; // lighting
 
     const w = this.width; // size of screen
     const h = this.height;
     const fov = 60; // field of view
     const stepOfAngle = DR*(fov/numOfRays);
-    
+
     const renderOffsetX = 0;
     const renderOffsetY = 0;
     const pixelLen = (w / numOfRays);
-    
+
 
     const px = this.player.x;
     const py = this.player.y;
@@ -229,6 +229,9 @@ export class Game {
     for (let r = 0; r < numOfRays; r++) {
       dof = 0;
 
+      let vmt = 0;
+      let hmt = 0;
+
       const aTan = -1 / Math.tan(ra);
       let disH = 1000000;
       let hx = px;
@@ -245,11 +248,12 @@ export class Game {
         mx = float2int(mx);
         my = float2int(my);
         mp = my * this.map.mapX + mx;
-        if (mp > 0 && mp < this.map.mapX * this.map.mapY && this.map.data[mp] > 0)
+        if (mp > 0 && mp < this.map.mapX * this.map.mapY && this.map.dataW[mp] > 0)
         {
           dof = maxDof;
           hx = rx; hy = ry; disH = this.distance(px, py, hx, hy);
-          // mh = this.map.data[mp];
+          hmt = this.map.dataW[mp]-1;
+          // 
         } else {
           rx += xo; ry += yo; dof++;
         }
@@ -267,23 +271,20 @@ export class Game {
       if (ra === 0 || ra === PI) { rx = px; ry = py; dof = maxDof; }
       while( dof < maxDof)
       {
-        mx = (rx | 0) >> 5;
-        my = (ry | 0) >> 5;
-        mp = my * this.map.mapX + mx;
-        if (mp > 0 && mp < this.map.mapX * this.map.mapY && this.map.data[mp] > 0)
-        {
+        mx = (rx | 0) >> 5; my = (ry | 0) >> 5; mp = my * this.map.mapX + mx;
+        if (mp > 0 && mp < this.map.mapX * this.map.mapY && this.map.dataW[mp] > 0) {
           vx = rx; vy = ry;  disV = this.distance(px, py, vx, vy);
-          // mv = this.map.data[mp];
+          vmt = this.map.dataW[mp]-1;
           dof = maxDof;
         } else {
           rx += xo; ry += yo; dof++;
         }
       }
 
-      const color = new Color(255, 255, 255);
+      let color = new Color(255, 255, 255);
       let shade = 1;
 
-      if (disV < disH) { rx = vx; ry = vy; disT = disV; shade = 0.5; }
+      if (disV < disH) { hmt = vmt; rx = vx; ry = vy; disT = disV; shade = 0.5; }
       if (disH < disV) { rx = hx; ry = hy; disT = disH;  }
 
       // await this.DrawLine(px, py, rx, ry, new Color(255, 200, 0));
@@ -294,7 +295,7 @@ export class Game {
       if (ca > 2 *PI) { ca -= 2 * PI; }
       disT = disT * Math.cos(ca);
 
-      let lineH = (this.map.mapS * h) / disT;
+      let lineH = (this.map.mapS * h * (w/h)) / disT;
       const tyStep = 32.0 / lineH;
       let tyOffset = 0;
 
@@ -304,41 +305,39 @@ export class Game {
       }
       const lineOffset = (h/2) - lineH/2;
 
-      const ax = r * pixelLen + renderOffsetX;
-      const ay = lineOffset + renderOffsetY;
-      let ty = tyOffset * tyStep;
-  
+      // draw walls
+      let ty = tyOffset * tyStep + hmt*32;
       let tx = 0;
-      
+
       if (shade === 1) {
-       tx = float2int(rx / 2) % 32; if (ra > 180) { tx = 31 - tx; }
+        tx = float2int(rx ) % 32; if (ra > 180) { tx = 31 - tx; }
       } else {
-        tx = float2int(ry / 2) % 32; if (ra > 90 && ra < 270) { tx = 31 - tx; }
+        tx = float2int(ry) % 32; if (ra > 90 && ra < 270) { tx = 31 - tx; }
       }
 
-      ty += 32;
+      if (hmt === 0)  color = new Color(255, 255, 255);
+      if (hmt === 1)  color = new Color(255, 128, 0);
+      if (hmt === 2)  color = new Color(128, 255, 0);
 
+      ty += 32;
       shade *= 1.0 / disT * dim;
-      
+      const newColor = new Color(255, 255, 255);
+
       for (let y = 0; y < lineH; y++) {
         const id = float2int(ty) * 32 + float2int(tx);
         const c = this.texture.AllTextures[id] * shade;
-        color.r = c * 255;
-        color.g = c * 255;
-        color.b = c * 255;
+        newColor.r = color.r  * c; newColor.g = color.g  * c; newColor.b = color.b  * c;
+        newColor.r = float2int(newColor.r); newColor.g = float2int(newColor.g); newColor.b = float2int(newColor.b);
 
-        color.r = float2int(color.r);
-        color.g = float2int(color.g);
-        color.b = float2int(color.b);
-
-        for (let ol = 0; ol < pixelLen; ol++) {
-          const ppx = float2int(ax+ol);
-          const ppy = float2int(ay+y);
-          this.PutPixel(ppx, ppy, color);
-        }
+        for (let ol = 0; ol < pixelLen; ol++)
+          this.PutPixel(float2int(r * pixelLen + renderOffsetX+ol), float2int(lineOffset + renderOffsetY+y), newColor);
 
         ty += tyStep;
       }
+
+
+      // draw floors
+
 
       ra += stepOfAngle;
       if (ra < 0) { ra += 2*PI; }
@@ -380,15 +379,15 @@ export class Game {
     const ipySubYo = float2int((this.player.y - yo)/this.map.mapS);
 
     if (this.keyUp) {
-      if (this.map.data[ipy * this.map.mapX + ipxAddXo] === 0)
+      if (this.map.dataW[ipy * this.map.mapX + ipxAddXo] === 0)
           this.player.x += this.player.px * movementSpeed;
-      if (this.map.data[ipyAddYo * this.map.mapX + ipx] === 0)
+      if (this.map.dataW[ipyAddYo * this.map.mapX + ipx] === 0)
         this.player.y += this.player.py * movementSpeed;
     }
     if (this.keyDown) {
-      if (this.map.data[ipy * this.map.mapX + ipxSubXo] === 0)
+      if (this.map.dataW[ipy * this.map.mapX + ipxSubXo] === 0)
           this.player.x -= this.player.px * movementSpeed;
-      if (this.map.data[ipySubYo * this.map.mapX + ipx] === 0)
+      if (this.map.dataW[ipySubYo * this.map.mapX + ipx] === 0)
         this.player.y -= this.player.py * movementSpeed;
     }
   }
