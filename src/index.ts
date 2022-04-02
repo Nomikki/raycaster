@@ -20,12 +20,19 @@ export class Game {
 
   ctxID: ImageData;
 
+  timer1: Date;
+  timer2: Date;
+
+
   constructor() {
     this.canvas = ensure(document.querySelector("#screen"));
     this.ctx = ensure((this.canvas as HTMLCanvasElement).getContext("2d"));
 
     this.width = 320;
     this.height = 200;
+
+    this.timer1 = new Date();
+    this.timer2 = new Date();
 
     this.ctxID = this.ctx.getImageData(0, 0, this.width, this.height);
     this.keyLeft = false;
@@ -306,9 +313,18 @@ export class Game {
      this.UpdateImage();
   }
 
+  async GetTime() : Promise<number> {
+    this.timer2 = new Date();
+    const result = Math.abs(this.timer1.getTime() - this.timer2.getTime());
+    this.timer1 = this.timer2;
+    // console.log(result);
+    return result / 1000.0;
+  }
+
   async HandleInputs() {
-    const movementSpeed = 2;
-    const turningSpeed = 0.05;
+    const deltaTime = await this.GetTime();
+    const movementSpeed = 100 * deltaTime;
+    const turningSpeed = 3 * deltaTime;
 
     if (this.keyLeft) {
       this.player.AddRotation(-turningSpeed);
@@ -336,7 +352,9 @@ export class Game {
 
       // await console.log(`x ${this.player.x}, y: ${this.player.y}`);
       this.HandleInputs();
-      await sleep(16);
+      const targetFPS = 60;
+      const fps = 1.0 / targetFPS * 1000;
+      await sleep(fps);
     }
   }
 }
