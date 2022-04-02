@@ -25,8 +25,11 @@ export class Game {
   timer1: Date;
   timer2: Date;
 
+  inde = 0;
 
   constructor() {
+    
+
     this.canvas = ensure(document.querySelector("#screen"));
     this.ctx = ensure((this.canvas as HTMLCanvasElement).getContext("2d"));
 
@@ -191,7 +194,7 @@ export class Game {
     const maxDof = 8;
     const pa = this.player.angle;
 
-    const numOfRays = 120; // how accurate raycaster will be
+    const numOfRays = 320; // how accurate raycaster will be
     const dim = 200; // lighting
 
     const w = this.width; // size of screen
@@ -218,13 +221,15 @@ export class Game {
     let disT = 0;
     const tileSize = this.map.mapS;
 
+    // const screenHalflen = Math.tan(fov / 2);
+    // console.log(screenHalflen);
+
 
     let ra = pa - DR * (fov / 2);
     if (ra < 0) { ra += 2*PI; }
     if (ra > 2 *PI) { ra -= 2 * PI; }
 
     this.FetchImage();
-
     // cast rays
     for (let r = 0; r < numOfRays; r++) {
       dof = 0;
@@ -310,9 +315,9 @@ export class Game {
       let tx = 0;
 
       if (shade === 1) {
-        tx = float2int(rx ) % 32; if (ra > 180) { tx = 31 - tx; }
+        tx = float2int(rx ) % 32; if (ra > (180 / 180.0 * 3.1415)) { tx = 31 - tx; }
       } else {
-        tx = float2int(ry) % 32; if (ra > 90 && ra < 270) { tx = 31 - tx; }
+        tx = float2int(ry) % 32; if (ra > 90  / 180.0 * 3.1415 && ra < 270  / 180.0 * 3.1415) { tx = 31 - tx; }
       }
 
       if (hmt === 0)  color = new Color(255, 255, 255);
@@ -335,8 +340,9 @@ export class Game {
         ty += tyStep;
       }
 
+      color = new Color(0, 0, 255);
 
-      // draw floors
+      
 
 
       ra += stepOfAngle;
@@ -345,6 +351,8 @@ export class Game {
     }
      this.UpdateImage();
   }
+
+  
 
   async GetTime() : Promise<number> {
     this.timer2 = new Date();
