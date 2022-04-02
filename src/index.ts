@@ -24,8 +24,8 @@ export class Game {
     this.canvas = ensure(document.querySelector("#screen"));
     this.ctx = ensure((this.canvas as HTMLCanvasElement).getContext("2d"));
 
-    this.width = 1024;
-    this.height = 512;
+    this.width = 320;
+    this.height = 200;
 
     this.ctxID = this.ctx.getImageData(0, 0, this.width, this.height);
     this.keyLeft = false;
@@ -33,7 +33,7 @@ export class Game {
     this.keyUp = false;
     this.keyDown = false;
 
-    this.player = new Player(300, 300);
+    this.player = new Player(50, 100);
     this.map = new Map();
 
     document.addEventListener(
@@ -81,11 +81,11 @@ export class Game {
     pixels[off + 3] = 255;
   }
 
-  FetchImage() {
+  async FetchImage() {
     this.ctxID = this.ctx.getImageData(0, 0, this.width, this.height);
   }
 
-  UpdateImage() {
+  async UpdateImage() {
     this.ctx.putImageData(this.ctxID, 0, 0);
   }
 
@@ -95,7 +95,7 @@ export class Game {
   }
 
   async DrawPlayer() {
-    const color = new Color(255, 200, 0);
+    const color = new Color(100, 200, 0);
     const size = 8;
     this.DrawRect(
       this.player.x - size,
@@ -105,12 +105,19 @@ export class Game {
       color
     );
 
-    this.DrawLine(this.player.x, this.player.y, this.player.x + (this.player.px*100), this.player.y + (this.player.py*100), new Color(255, 0, 0));
+    /*
+    this.DrawLine(
+      this.player.x,
+      this.player.y,
+      this.player.x + this.player.px * 100,
+      this.player.y + this.player.py * 100,
+      new Color(255, 0, 0)
+    );
+    */
   }
 
-  DrawLine(x0: number, y0: number, x1: number, y1: number, color: Color) {
-    this.FetchImage();
-
+  async DrawLine(x0: number, y0: number, x1: number, y1: number, color: Color) {
+  
     x0 = float2int(x0);
     y0 = float2int(y0);
     x1 = float2int(x1);
@@ -121,7 +128,6 @@ export class Game {
     const sx = x0 < x1 ? 1 : -1;
     const sy = y0 < y1 ? 1 : -1;
     let err = dx - dy;
-    color.b = 0;
 
     while (true) {
       this.PutPixel(x0, y0, color);
@@ -138,7 +144,7 @@ export class Game {
       }
     }
 
-    this.UpdateImage();
+  
   }
 
   async DrawMap2d() {
@@ -147,9 +153,9 @@ export class Game {
         const tileID = this.map.data[y * this.map.mapX + x];
         let color = new Color(0, 0, 0);
 
-        if (tileID === 1) {
-          color = new Color(255, 255, 255);
-        }
+        if (tileID === 1) color = new Color(200, 200, 200);
+        if (tileID === 2) color = new Color(0, 0, 200);
+        
 
         this.DrawRect(
           x * this.map.mapS + 1,
@@ -162,9 +168,147 @@ export class Game {
     }
   }
 
+  distance(ax: number, ay: number, bx: number, by: number): number {
+    return Math.sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay));
+  }
+
+  async DrawRays3D() {
+    const PI = Math.PI;
+    const PI2 = Math.PI / 2;
+    const PI3 = 3 * PI / 2;
+    const DR = 3.1415 / 180.0; // degree to radian
+    let dof = 0;
+    const maxDof = 8;
+    const pa = this.player.angle;
+
+    const numOfRays = 64; // how accurate raycaster will be
+    const dim = 64; // lighting
+
+    const w = this.width; // size of screen
+    const h = this.height;
+    const fov = 60; // field of view
+    const stepOfAngle = DR*(fov/numOfRays);
+
+    const renderOffsetX = 0;
+    const renderOffsetY = 0;
+    const pixelLen = (w / numOfRays);
+
+    const px = this.player.x;
+    const py = this.player.y;
+
+    let ry = 0;
+    let rx = 0;
+    let yo = 0;
+    let xo = 0;
+ 
+    let mx = 0;
+    let my = 0;
+    let mp = 0;
+    let disT = 0;
+    const tileSize = this.map.mapS;
+
+
+    let ra = pa - DR * (fov / 2);
+    if (ra < 0) { ra += 2*PI; }
+    if (ra > 2 *PI) { ra -= 2 * PI; }
+
+    this.FetchImage();
+
+    // cast rays
+    for (let r = 0; r < numOfRays; r++) {
+      dof = 0;
+
+      const aTan = -1 / Math.tan(ra);
+      let disH = 1000000;
+      let hx = px;
+      let hy = py;
+      let mh = 0;
+
+      if (ra > PI) { ry = (( float2int(py)>>5) << 5) - 0.0001; rx = (py - ry) * aTan + px; yo = -tileSize; xo = -yo * aTan; }
+      if (ra < PI) { ry = (( float2int(py)>>5) << 5) + tileSize; rx = (py - ry) * aTan + px;      yo = tileSize; xo = -yo * aTan; }
+      if (ra === 0 || ra === PI) { rx = px; ry = py; dof = 8; }
+      while( dof < maxDof)
+      {
+        mx = float2int(rx) >> 5;
+        my = float2int(ry) >> 5;
+        mx = float2int(mx);
+        my = float2int(my);
+        mp = my * this.map.mapX + mx;
+        if (mp > 0 && mp < this.map.mapX * this.map.mapY && this.map.data[mp] > 0)
+        {
+          dof = maxDof;
+          hx = rx; hy = ry; disH = this.distance(px, py, hx, hy);
+          mh = this.map.data[mp];
+        } else {
+          rx += xo; ry += yo; dof++;
+        }
+      }
+
+      // hori
+      const nTan = -Math.tan(ra);
+      let disV = 1000000;
+      let vx = px;
+      let vy = py;
+      let mv = 0;
+      dof = 0;
+      if (ra > PI2 && ra < PI3) { rx = (( (px | 0)>>5) << 5) - 0.0001; ry = (px - rx) * nTan + py; xo = -tileSize; yo = -xo * nTan; }
+      if (ra < PI2 || ra > PI3) { rx = (( (px | 0)>>5) << 5) + tileSize;     ry = (px - rx) * nTan + py; xo =  tileSize; yo = -xo * nTan; }
+      if (ra === 0 || ra === PI) { rx = px; ry = py; dof = maxDof; }
+      while( dof < maxDof)
+      {
+        mx = (rx | 0) >> 5;
+        my = (ry | 0) >> 5;
+        mp = my * this.map.mapX + mx;
+        if (mp > 0 && mp < this.map.mapX * this.map.mapY && this.map.data[mp] > 0)
+        {
+          vx = rx; vy = ry;  disV = this.distance(px, py, vx, vy);
+          mv = this.map.data[mp];
+          dof = maxDof;
+        } else {
+          rx += xo; ry += yo; dof++;
+        }
+      }
+
+      let color = new Color(255, 255, 255);
+
+      if (disV < disH) { rx = vx; ry = vy; disT = disV; color = new Color(192, 192, 192);  if (mv === 2) color = new Color(0, 0, 255); }
+      if (disH < disV) { rx = hx; ry = hy; disT = disH; color = new Color(255, 255, 255);  if (mh === 2) color = new Color(0, 0, 255); }
+
+      // await this.DrawLine(px, py, rx, ry, new Color(255, 200, 0));
+
+      // 3d walls
+      let ca = pa - ra;
+      if (ca < 0) { ca += 2*PI; }
+      if (ca > 2 *PI) { ca -= 2 * PI; }
+      disT = disT * Math.cos(ca);
+
+      let lineH = (this.map.mapS * h) / disT;
+      if (lineH > h) lineH = h;
+      const lineO = (h/2) - lineH/2;
+
+      const ax = r * pixelLen + renderOffsetX;
+      const ay = lineO + renderOffsetY;
+      const bx = r * pixelLen + renderOffsetX;
+      const by = lineH+lineO + renderOffsetY;
+
+      color.r *= 1 / disT * dim;
+      color.g *= 1 / disT * dim;
+      color.b *= 1 / disT * dim;
+
+      for (let ol = 0; ol < pixelLen; ol++) {
+        this.DrawLine(ax+ol, ay, bx+ol, by, color);
+      }
+
+      ra += stepOfAngle;
+      if (ra < 0) { ra += 2*PI; }
+      if (ra > 2 *PI) { ra -= 2 * PI; }
+    }
+     this.UpdateImage();
+  }
+
   async HandleInputs() {
     const movementSpeed = 2;
-    const turningSpeed = 0.1;
+    const turningSpeed = 0.05;
 
     if (this.keyLeft) {
       this.player.AddRotation(-turningSpeed);
@@ -186,8 +330,9 @@ export class Game {
     console.log("Game is running");
     while (true) {
       this.Clear(new Color(64, 64, 64));
-      this.DrawMap2d();
-      this.DrawPlayer();
+      // this.DrawMap2d();
+      // this.DrawPlayer();
+      this.DrawRays3D();
 
       // await console.log(`x ${this.player.x}, y: ${this.player.y}`);
       this.HandleInputs();
